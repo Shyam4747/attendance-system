@@ -1,0 +1,167 @@
+PROJENIUS INNOVATION TECHNOLOGY PRIVATE LIMITED
+ATTENDANCE SYSTEM - RUN INSTRUCTIONS
+
+1. REQUIREMENTS
+
+- Node.js installed
+- MongoDB installed and running locally
+- Laptop/desktop browser with camera permission support
+- Recommended browser: Chrome or Microsoft Edge
+
+2. PROJECT FOLDER
+
+After unzipping, open this folder:
+
+attendance-system
+
+The project has two main parts:
+
+- backend  - API server and MongoDB connection
+- frontend - React admin dashboard
+
+3. MONGODB
+
+Make sure MongoDB is running.
+
+Default database connection:
+
+mongodb://127.0.0.1:27017/attendance
+
+Backend config file:
+
+backend/.env
+
+Current local settings:
+
+PORT=5050
+MONGODB_URI=mongodb://127.0.0.1:27017/attendance
+ADMIN_USER=admin
+ADMIN_PASSWORD=Admin@123pj
+
+4. INSTALL DEPENDENCIES
+
+Open a terminal in the backend folder:
+
+cd backend
+npm install
+
+Open another terminal in the frontend folder:
+
+cd frontend
+npm install
+
+5. START THE BACKEND
+
+In the backend folder:
+
+npm run dev
+
+Backend URL:
+
+http://localhost:5050
+
+Health check:
+
+http://localhost:5050/api/health
+
+6. START THE FRONTEND
+
+In the frontend folder:
+
+npm run dev
+
+Frontend URL:
+
+http://localhost:5174
+
+If Vite chooses a different port, use the URL shown in the terminal.
+
+7. ADMIN LOGIN
+
+Open the frontend URL in Chrome or Edge:
+
+http://localhost:5174
+
+Login:
+
+Username: admin
+Password: Admin@123pj
+
+8. CAMERA / FACE RECOGNITION
+
+Use Chrome or Edge.
+
+Steps:
+
+1. Login as admin.
+2. Add an employee/student profile.
+3. Click Start Camera.
+4. Allow camera permission in the browser.
+5. Select the profile.
+6. Click Register Face.
+7. After registration, click Mark by Face to mark attendance.
+
+Notes:
+
+- Use one clear face at a time.
+- Use good lighting.
+- Keep the face centered.
+- If camera does not start, check browser camera permission.
+
+9. ATTENDANCE RULES
+
+- One person can be marked only once per day.
+- Attendance date and log time use IST - Tamil Nadu.
+- Duplicate attendance is blocked automatically.
+
+10. REPORTS
+
+The admin dashboard supports:
+
+- Date range filter
+- Department filter
+- CSV export
+- PDF export with ProJenius logo
+
+11. FINGERPRINT SUPPORT
+
+Fingerprint hardware is not connected yet.
+
+The system has a placeholder for future fingerprint integration.
+Once the fingerprint scanner model is selected, connect its SDK to the backend fingerprint endpoint.
+
+12. COMMON ISSUES
+
+Backend not working:
+
+- Check MongoDB is running.
+- Check backend terminal for errors.
+- Confirm backend/.env has the correct MONGODB_URI.
+
+Frontend cannot load data:
+
+- Make sure backend is running on port 5050.
+- Login again if the admin session expired.
+
+Camera not working:
+
+- Use Chrome or Edge.
+- Allow camera permission.
+- Close other apps using the camera.
+
+13. BUILD FOR PRODUCTION
+
+Frontend:
+
+cd frontend
+npm run build
+
+Backend:
+
+cd backend
+npm start
+
+14. IMPORTANT SECURITY NOTE
+
+Change ADMIN_PASSWORD and JWT_SECRET in backend/.env before real deployment.
+
