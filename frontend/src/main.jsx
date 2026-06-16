@@ -74,6 +74,29 @@ function getCameraErrorMessage(error) {
   return error?.name ? `${error.name}: ${error.message}` : error.message;
 }
 
+function getApiErrorMessage(error) {
+  const message = String(error?.message || error || "");
+
+  if (
+    message.includes("Failed to fetch") ||
+    message.includes("NetworkError") ||
+    message.includes("Load failed") ||
+    message.includes("Network request failed")
+  ) {
+    return "Server is waking up. Please wait 30 seconds, then try again.";
+  }
+
+  return message || "Something went wrong. Please try again.";
+}
+
+async function readJson(response) {
+  try {
+    return await response.json();
+  } catch (_error) {
+    return {};
+  }
+}
+
 function Icon({ name, size = 18, className = "" }) {
   const icons = {
     dashboard: (
@@ -435,8 +458,8 @@ function App() {
   }
 
   useEffect(() => {
-    loadData().catch(() => {
-      setStatus("Could not reach attendance API. Start the backend on port 5050.");
+    loadData().catch((error) => {
+      setStatus(getApiErrorMessage(error));
       setLoading(false);
     });
   }, [token, reportFrom, reportTo, reportDepartment]);
@@ -503,7 +526,7 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(credentials),
       });
-      const data = await response.json();
+      const data = await readJson(response);
 
       if (!response.ok) {
         throw new Error(data.error || "Login failed.");
@@ -516,7 +539,7 @@ function App() {
       setLoginForm({ username: data.admin.username, password: "" });
       setStatus("Admin login successful.");
     } catch (error) {
-      setLoginError(error.message);
+      setLoginError(getApiErrorMessage(error));
     }
   }
 
@@ -660,7 +683,7 @@ function App() {
       showStatus("Face profile registered successfully.");
       await loadData();
     } catch (error) {
-      showStatus(error.message);
+      showStatus(getApiErrorMessage(error));
     } finally {
       setFaceBusy(false);
     }
@@ -682,7 +705,7 @@ function App() {
         headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ descriptor }),
       });
-      const data = await response.json();
+      const data = await readJson(response);
 
       if (!response.ok) {
         throw new Error(data.error || "No matching face profile found.");
@@ -691,7 +714,7 @@ function App() {
       showStatus(`Attendance marked for ${data.person.name}.`);
       await loadData();
     } catch (error) {
-      showStatus(error.message);
+      showStatus(getApiErrorMessage(error));
     } finally {
       setFaceBusy(false);
     }
@@ -701,22 +724,26 @@ function App() {
     event.preventDefault();
     setStatusText("");
 
-    const response = await fetch(editingPersonId ? `${API_URL}/people/${editingPersonId}` : `${API_URL}/people`, {
-      method: editingPersonId ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders },
-      body: JSON.stringify(form),
-    });
+    try {
+      const response = await fetch(editingPersonId ? `${API_URL}/people/${editingPersonId}` : `${API_URL}/people`, {
+        method: editingPersonId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify(form),
+      });
 
-    if (!response.ok) {
-      const data = await response.json();
-      setStatus(data.error || `Could not ${editingPersonId ? "update" : "add"} profile. Check ID uniqueness.`);
-      return;
+      if (!response.ok) {
+        const data = await readJson(response);
+        setStatus(data.error || `Could not ${editingPersonId ? "update" : "add"} profile. Check ID uniqueness.`);
+        return;
+      }
+
+      setForm({ personCode: "", name: "", role: "student", department: "", phone: "" });
+      setEditingPersonId("");
+      setStatus(editingPersonId ? "Profile updated successfully." : "Profile added successfully.");
+      await loadData();
+    } catch (error) {
+      setStatus(getApiErrorMessage(error));
     }
-
-    setForm({ personCode: "", name: "", role: "student", department: "", phone: "" });
-    setEditingPersonId("");
-    setStatus(editingPersonId ? "Profile updated successfully." : "Profile added successfully.");
-    await loadData();
   }
 
   function startEditProfile(person) {
@@ -748,45 +775,53 @@ function App() {
       return;
     }
 
-    const response = await fetch(`${API_URL}/people/${person._id}`, {
-      method: "DELETE",
-      headers: authHeaders,
-    });
+    try {
+      const response = await fetch(`${API_URL}/people/${person._id}`, {
+        method: "DELETE",
+        headers: authHeaders,
+      });
 
-    const data = await response.json();
+      const data = await readJson(response);
 
-    if (!response.ok) {
-      setStatus(data.error || "Could not remove profile.");
-      return;
+      if (!response.ok) {
+        setStatus(data.error || "Could not remove profile.");
+        return;
+      }
+
+      if (editingPersonId === person._id) {
+        cancelEditProfile();
+      }
+
+      setStatus(`Removed ${person.name}. Deleted ${data.deletedAttendanceRecords || 0} attendance records.`);
+      await loadData();
+    } catch (error) {
+      setStatus(getApiErrorMessage(error));
     }
-
-    if (editingPersonId === person._id) {
-      cancelEditProfile();
-    }
-
-    setStatus(`Removed ${person.name}. Deleted ${data.deletedAttendanceRecords || 0} attendance records.`);
-    await loadData();
   }
 
   async function markManual(event) {
     event.preventDefault();
     setStatusText("");
 
-    const response = await fetch(`${API_URL}/attendance/manual`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders },
-      body: JSON.stringify({ personCode: manualCode, status: "present" }),
-    });
+    try {
+      const response = await fetch(`${API_URL}/attendance/manual`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({ personCode: manualCode, status: "present" }),
+      });
 
-    if (!response.ok) {
-      const data = await response.json();
-      setStatus(data.error || "Could not mark attendance. Check the ID.");
-      return;
+      if (!response.ok) {
+        const data = await readJson(response);
+        setStatus(data.error || "Could not mark attendance. Check the ID.");
+        return;
+      }
+
+      setManualCode("");
+      setStatus("Attendance marked as present.");
+      await loadData();
+    } catch (error) {
+      setStatus(getApiErrorMessage(error));
     }
-
-    setManualCode("");
-    setStatus("Attendance marked as present.");
-    await loadData();
   }
 
   function exportCsv() {
