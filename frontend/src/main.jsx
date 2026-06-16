@@ -741,6 +741,33 @@ function App() {
     setStatus("Profile editing cancelled.");
   }
 
+  async function deletePerson(person) {
+    const confirmed = window.confirm(`Remove ${person.name} (${person.personCode}) and their attendance records?`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    const response = await fetch(`${API_URL}/people/${person._id}`, {
+      method: "DELETE",
+      headers: authHeaders,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      setStatus(data.error || "Could not remove profile.");
+      return;
+    }
+
+    if (editingPersonId === person._id) {
+      cancelEditProfile();
+    }
+
+    setStatus(`Removed ${person.name}. Deleted ${data.deletedAttendanceRecords || 0} attendance records.`);
+    await loadData();
+  }
+
   async function markManual(event) {
     event.preventDefault();
     setStatusText("");
@@ -1316,6 +1343,10 @@ function App() {
                       <button type="button" className="inline-action" onClick={() => startEditProfile(person)}>
                         <Icon name="edit" size={12} />
                         Edit
+                      </button>
+                      <button type="button" className="inline-action inline-action-danger" onClick={() => deletePerson(person)}>
+                        <Icon name="close" size={12} />
+                        Remove
                       </button>
                     </span>
                   </div>

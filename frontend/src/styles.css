@@ -1232,6 +1232,25 @@ input:focus, select:focus {
   color: var(--color-cyan);
 }
 
+.row-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.inline-action-danger {
+  color: #fecaca;
+  border-color: rgba(239, 68, 68, 0.24);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.inline-action-danger:hover {
+  color: #ffffff;
+  border-color: var(--color-danger);
+  background: var(--color-danger);
+}
+
 .status-chip {
   padding: 4px 10px;
   border-radius: 999px;

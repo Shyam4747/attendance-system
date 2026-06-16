@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { AttendanceRecord } from "../models/AttendanceRecord.js";
 import { Person } from "../models/Person.js";
 
 export const peopleRouter = Router();
@@ -39,6 +40,22 @@ peopleRouter.patch("/:id", async (req, res) => {
   }
 
   res.json({ person });
+});
+
+peopleRouter.delete("/:id", async (req, res) => {
+  const person = await Person.findByIdAndDelete(req.params.id);
+
+  if (!person) {
+    res.status(404).json({ error: "Person not found." });
+    return;
+  }
+
+  const attendanceResult = await AttendanceRecord.deleteMany({ person: person._id });
+
+  res.json({
+    person,
+    deletedAttendanceRecords: attendanceResult.deletedCount || 0,
+  });
 });
 
 peopleRouter.patch("/:id/face-profile", async (req, res) => {
