@@ -5,8 +5,10 @@ function getMongoUri(uri) {
     return uri;
   }
 
-  if (process.env.MONGO_PASSWORD) {
-    const password = encodeURIComponent(process.env.MONGO_PASSWORD);
+  const atlasPassword = process.env.MONGO_PASSWORD || process.env.ADMIN_PASSWORD;
+
+  if (atlasPassword) {
+    const password = encodeURIComponent(atlasPassword);
     return `mongodb+srv://shyam2353050_db_user:${password}@cluster0.hdzmfgq.mongodb.net/attendance?retryWrites=true&w=majority&appName=Cluster0`;
   }
 
