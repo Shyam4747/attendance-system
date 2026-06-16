@@ -1430,6 +1430,57 @@ input:focus, select:focus {
   color: var(--text-primary);
 }
 
+/* Confirmation Modal */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(2, 6, 23, 0.72);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: fadeIn 0.2s ease;
+}
+
+.confirm-modal {
+  width: min(440px, 100%);
+  padding: 24px;
+  display: grid;
+  gap: 18px;
+  overflow: visible;
+}
+
+.confirm-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  color: var(--color-danger);
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.28);
+}
+
+.confirm-copy h2 {
+  margin-top: 4px;
+  margin-bottom: 8px;
+  font-size: 22px;
+  color: var(--text-primary);
+}
+
+.confirm-copy p {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
 /* Spinner Loader */
 .spinner {
   width: 18px;
@@ -1886,6 +1937,26 @@ input:focus, select:focus {
   .toast {
     padding: 12px;
     border-radius: 14px;
+  }
+
+  .modal-backdrop {
+    align-items: end;
+    padding: 12px;
+  }
+
+  .confirm-modal {
+    padding: 18px;
+    border-radius: 18px;
+    gap: 14px;
+    margin-bottom: calc(78px + env(safe-area-inset-bottom));
+  }
+
+  .confirm-copy h2 {
+    font-size: 20px;
+  }
+
+  .confirm-actions {
+    grid-template-columns: 1fr;
   }
 }
 

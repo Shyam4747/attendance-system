@@ -279,6 +279,8 @@ function App() {
   const [theme, setTheme] = useState(() => window.localStorage.getItem("attendance_theme") || "dark");
   const [activeTab, setActiveTab] = useState("overview");
   const [toasts, setToasts] = useState([]);
+  const [personPendingDelete, setPersonPendingDelete] = useState(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   // Setup Theme on load / change
   useEffect(() => {
@@ -768,15 +770,18 @@ function App() {
     setStatus("Profile editing cancelled.");
   }
 
-  async function deletePerson(person) {
-    const confirmed = window.confirm(`Remove ${person.name} (${person.personCode}) and their attendance records?`);
+  function requestDeletePerson(person) {
+    setPersonPendingDelete(person);
+  }
 
-    if (!confirmed) {
+  async function deletePerson() {
+    if (!personPendingDelete) {
       return;
     }
 
+    setDeleteBusy(true);
     try {
-      const response = await fetch(`${API_URL}/people/${person._id}`, {
+      const response = await fetch(`${API_URL}/people/${personPendingDelete._id}`, {
         method: "DELETE",
         headers: authHeaders,
       });
@@ -788,14 +793,17 @@ function App() {
         return;
       }
 
-      if (editingPersonId === person._id) {
+      if (editingPersonId === personPendingDelete._id) {
         cancelEditProfile();
       }
 
-      setStatus(`Removed ${person.name}. Deleted ${data.deletedAttendanceRecords || 0} attendance records.`);
+      setStatus(`Removed ${personPendingDelete.name}. Deleted ${data.deletedAttendanceRecords || 0} attendance records.`);
+      setPersonPendingDelete(null);
       await loadData();
     } catch (error) {
       setStatus(getApiErrorMessage(error));
+    } finally {
+      setDeleteBusy(false);
     }
   }
 
@@ -1010,6 +1018,32 @@ function App() {
           </div>
         ))}
       </div>
+
+      {personPendingDelete && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => !deleteBusy && setPersonPendingDelete(null)}>
+          <section className="glass-panel confirm-modal" role="dialog" aria-modal="true" aria-labelledby="delete-profile-title" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="confirm-icon">
+              <Icon name="alert" size={22} />
+            </div>
+            <div className="confirm-copy">
+              <span className="section-kicker">Remove Profile</span>
+              <h2 id="delete-profile-title">{personPendingDelete.name}</h2>
+              <p>
+                This will permanently remove {personPendingDelete.personCode} and delete their attendance records from reports.
+              </p>
+            </div>
+            <div className="confirm-actions">
+              <button type="button" className="secondary-button" onClick={() => setPersonPendingDelete(null)} disabled={deleteBusy}>
+                Cancel
+              </button>
+              <button type="button" className="danger-button" onClick={deletePerson} disabled={deleteBusy}>
+                <Icon name="close" size={16} />
+                {deleteBusy ? "Removing..." : "Remove"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
 
       <header className="glass-panel hero">
         <div className="hero-copy">
@@ -1379,7 +1413,7 @@ function App() {
                         <Icon name="edit" size={12} />
                         Edit
                       </button>
-                      <button type="button" className="inline-action inline-action-danger" onClick={() => deletePerson(person)}>
+                      <button type="button" className="inline-action inline-action-danger" onClick={() => requestDeletePerson(person)}>
                         <Icon name="close" size={12} />
                         Remove
                       </button>
