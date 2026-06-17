@@ -97,6 +97,87 @@ async function readJson(response) {
   }
 }
 
+function base64UrlToBuffer(value) {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
+  const binary = window.atob(padded);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return bytes.buffer;
+}
+
+function bufferToBase64Url(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
+  return window.btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function prepareRegistrationOptions(options) {
+  return {
+    ...options,
+    challenge: base64UrlToBuffer(options.challenge),
+    user: {
+      ...options.user,
+      id: base64UrlToBuffer(options.user.id),
+    },
+    excludeCredentials: (options.excludeCredentials || []).map((credential) => ({
+      ...credential,
+      id: base64UrlToBuffer(credential.id),
+    })),
+  };
+}
+
+function prepareAuthenticationOptions(options) {
+  return {
+    ...options,
+    challenge: base64UrlToBuffer(options.challenge),
+    allowCredentials: (options.allowCredentials || []).map((credential) => ({
+      ...credential,
+      id: base64UrlToBuffer(credential.id),
+    })),
+  };
+}
+
+function registrationCredentialToJson(credential) {
+  return {
+    id: credential.id,
+    rawId: bufferToBase64Url(credential.rawId),
+    type: credential.type,
+    response: {
+      attestationObject: bufferToBase64Url(credential.response.attestationObject),
+      clientDataJSON: bufferToBase64Url(credential.response.clientDataJSON),
+      transports: credential.response.getTransports?.() || [],
+    },
+    clientExtensionResults: credential.getClientExtensionResults(),
+    authenticatorAttachment: credential.authenticatorAttachment,
+  };
+}
+
+function authenticationCredentialToJson(credential) {
+  return {
+    id: credential.id,
+    rawId: bufferToBase64Url(credential.rawId),
+    type: credential.type,
+    response: {
+      authenticatorData: bufferToBase64Url(credential.response.authenticatorData),
+      clientDataJSON: bufferToBase64Url(credential.response.clientDataJSON),
+      signature: bufferToBase64Url(credential.response.signature),
+      userHandle: credential.response.userHandle ? bufferToBase64Url(credential.response.userHandle) : undefined,
+    },
+    clientExtensionResults: credential.getClientExtensionResults(),
+    authenticatorAttachment: credential.authenticatorAttachment,
+  };
+}
+
 function Icon({ name, size = 18, className = "" }) {
   const icons = {
     dashboard: (
@@ -262,8 +343,10 @@ function App() {
   const [cameraActive, setCameraActive] = useState(false);
   const [faceModelsReady, setFaceModelsReady] = useState(false);
   const [faceBusy, setFaceBusy] = useState(false);
+  const [fingerprintBusy, setFingerprintBusy] = useState(false);
   const [faceDetectionStatus, setFaceDetectionStatus] = useState("idle");
   const [selectedPersonId, setSelectedPersonId] = useState("");
+  const [fingerprintSupported] = useState(() => Boolean(window.PublicKeyCredential && navigator.credentials));
   const [token, setToken] = useState(() => window.localStorage.getItem(TOKEN_KEY) || "");
   const [admin, setAdmin] = useState(() => window.localStorage.getItem("attendance_admin_name") || "");
   const [loginForm, setLoginForm] = useState({ username: "admin", password: "" });
@@ -426,11 +509,17 @@ function App() {
   const reportStats = useMemo(() => {
     const present = records.filter((record) => record.status === "present").length;
     const face = records.filter((record) => record.method === "face").length;
+    const fingerprint = records.filter((record) => record.method === "fingerprint").length;
     const manual = records.filter((record) => record.method === "manual").length;
     const uniquePeople = new Set(records.map((record) => record.personCode)).size;
 
-    return { present, face, manual, uniquePeople };
+    return { present, face, fingerprint, manual, uniquePeople };
   }, [records]);
+
+  const selectedPerson = useMemo(
+    () => people.find((person) => person._id === selectedPersonId) || null,
+    [people, selectedPersonId],
+  );
 
   const faceReadiness = useMemo(() => {
     if (faceBusy) {
@@ -447,6 +536,26 @@ function App() {
 
     return "Ready to register the selected profile or mark attendance by face.";
   }, [cameraActive, faceBusy, selectedPersonId]);
+
+  const fingerprintReadiness = useMemo(() => {
+    if (fingerprintBusy) {
+      return "Waiting for the phone fingerprint prompt...";
+    }
+
+    if (!fingerprintSupported) {
+      return "This browser does not support phone fingerprint/passkey verification.";
+    }
+
+    if (!selectedPersonId) {
+      return "Select a profile before registering or marking by phone fingerprint.";
+    }
+
+    if (selectedPerson?.fingerprintProfile?.status === "registered") {
+      return "Phone fingerprint is registered for this profile.";
+    }
+
+    return "Register this phone fingerprint once before marking attendance.";
+  }, [fingerprintBusy, fingerprintSupported, selectedPerson, selectedPersonId]);
 
   function showStatus(message) {
     setStatus(message);
@@ -754,6 +863,120 @@ function App() {
     }
   }
 
+  async function registerFingerprint() {
+    if (!fingerprintSupported) {
+      showStatus("Phone fingerprint is not available in this browser. Open the HTTPS app in Chrome, Edge, or Safari.");
+      return;
+    }
+
+    if (!selectedPersonId) {
+      showStatus("Select a profile before registering phone fingerprint.");
+      return;
+    }
+
+    setFingerprintBusy(true);
+    showStatus("Opening phone fingerprint registration...");
+
+    try {
+      const optionsResponse = await fetch(`${API_URL}/fingerprint/register/options`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({ personId: selectedPersonId }),
+      });
+      const optionsData = await readJson(optionsResponse);
+
+      if (!optionsResponse.ok) {
+        throw new Error(optionsData.error || "Could not start phone fingerprint registration.");
+      }
+
+      const credential = await navigator.credentials.create({
+        publicKey: prepareRegistrationOptions(optionsData.options),
+      });
+
+      if (!credential) {
+        throw new Error("Fingerprint registration was cancelled.");
+      }
+
+      const verifyResponse = await fetch(`${API_URL}/fingerprint/register/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({
+          personId: selectedPersonId,
+          response: registrationCredentialToJson(credential),
+        }),
+      });
+      const verifyData = await readJson(verifyResponse);
+
+      if (!verifyResponse.ok) {
+        throw new Error(verifyData.error || "Could not verify phone fingerprint.");
+      }
+
+      showStatus(`Phone fingerprint registered for ${verifyData.person.name}.`);
+      await loadData();
+    } catch (error) {
+      showStatus(getApiErrorMessage(error));
+    } finally {
+      setFingerprintBusy(false);
+    }
+  }
+
+  async function markFingerprintAttendance() {
+    if (!fingerprintSupported) {
+      showStatus("Phone fingerprint is not available in this browser. Open the HTTPS app in Chrome, Edge, or Safari.");
+      return;
+    }
+
+    if (!selectedPersonId) {
+      showStatus("Select a profile before marking by phone fingerprint.");
+      return;
+    }
+
+    setFingerprintBusy(true);
+    showStatus("Touch the phone fingerprint sensor to mark attendance...");
+
+    try {
+      const optionsResponse = await fetch(`${API_URL}/fingerprint/attendance/options`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({ personId: selectedPersonId }),
+      });
+      const optionsData = await readJson(optionsResponse);
+
+      if (!optionsResponse.ok) {
+        throw new Error(optionsData.error || "Could not start fingerprint attendance.");
+      }
+
+      const credential = await navigator.credentials.get({
+        publicKey: prepareAuthenticationOptions(optionsData.options),
+      });
+
+      if (!credential) {
+        throw new Error("Fingerprint verification was cancelled.");
+      }
+
+      const verifyResponse = await fetch(`${API_URL}/fingerprint/attendance/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({
+          personId: selectedPersonId,
+          response: authenticationCredentialToJson(credential),
+        }),
+      });
+      const verifyData = await readJson(verifyResponse);
+
+      if (!verifyResponse.ok) {
+        throw new Error(verifyData.error || "Fingerprint attendance failed.");
+      }
+
+      showStatus(`Fingerprint attendance marked for ${verifyData.person.name}.`);
+      await loadData();
+    } catch (error) {
+      showStatus(getApiErrorMessage(error));
+    } finally {
+      setFingerprintBusy(false);
+    }
+  }
+
   async function addPerson(event) {
     event.preventDefault();
     setStatusText("");
@@ -928,7 +1151,7 @@ function App() {
     doc.text(`Department: ${reportDepartment === "all" ? "All departments" : reportDepartment}`, 40, 108);
     doc.text(`Time zone: ${ATTENDANCE_TIME_LABEL}`, 40, 124);
     doc.text(
-      `Records: ${records.length} | People: ${reportStats.uniquePeople} | Face: ${reportStats.face} | Manual: ${reportStats.manual}`,
+      `Records: ${records.length} | People: ${reportStats.uniquePeople} | Face: ${reportStats.face} | Fingerprint: ${reportStats.fingerprint} | Manual: ${reportStats.manual}`,
       40,
       140,
     );
@@ -1252,12 +1475,12 @@ function App() {
                   <small>Register a profile face, then mark attendance from the same camera.</small>
                 </div>
                 <div className="biometric-tile biometric-fingerprint">
-                  <span>Fingerprint Scanner</span>
+                  <span>Phone Fingerprint</span>
                   <strong>
                     <Icon name="fingerprint" size={16} />
-                    Adapter pending
+                    {fingerprintSupported ? "Passkey ready" : "Not supported"}
                   </strong>
-                  <small>Hardware SDK will plug in after the scanner is selected.</small>
+                  <small>Uses the mobile fingerprint sensor through secure WebAuthn verification.</small>
                 </div>
               </div>
             </section>
@@ -1316,7 +1539,7 @@ function App() {
                     <option value="">Select profile</option>
                     {people.map((person) => (
                       <option value={person._id} key={person._id}>
-                        {person.personCode} - {person.name} ({person.faceProfile?.descriptor?.length ? "Registered" : "Not Registered"})
+                        {person.personCode} - {person.name} (Face {person.faceProfile?.descriptor?.length ? "ready" : "new"} / Fingerprint {person.fingerprintProfile?.status === "registered" ? "ready" : "new"})
                       </option>
                     ))}
                   </select>
@@ -1344,14 +1567,22 @@ function App() {
                     <Icon name="check" size={16} />
                     {faceBusy ? <span className="spinner"></span> : "Mark by Face"}
                   </button>
+                  <button type="button" className="secondary-button" onClick={registerFingerprint} disabled={fingerprintBusy || !fingerprintSupported || !selectedPersonId}>
+                    <Icon name="fingerprint" size={16} />
+                    {fingerprintBusy ? <span className="spinner"></span> : "Register Fingerprint"}
+                  </button>
+                  <button type="button" className="cyan-button" onClick={markFingerprintAttendance} disabled={fingerprintBusy || !fingerprintSupported || !selectedPersonId}>
+                    <Icon name="check" size={16} />
+                    {fingerprintBusy ? <span className="spinner"></span> : "Mark by Fingerprint"}
+                  </button>
                 </div>
 
                 <div className="readiness-note">
-                  {faceNotice || faceReadiness}
+                  {faceNotice || `${faceReadiness} ${fingerprintReadiness}`}
                 </div>
 
                 <p className="camera-note">
-                  Ensure the person is front-facing and well lit. StandardTinyFaceDetector runs in real-time on your processor.
+                  Face matching uses the camera. Phone fingerprint uses the device passkey prompt and never sends raw fingerprint data to the server.
                 </p>
               </div>
             </div>

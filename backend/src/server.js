@@ -5,6 +5,7 @@ import { connectDatabase } from "./db.js";
 import { requireAdmin } from "./middleware/auth.js";
 import { attendanceRouter } from "./routes/attendance.js";
 import { authRouter } from "./routes/auth.js";
+import { fingerprintRouter } from "./routes/fingerprint.js";
 import { peopleRouter } from "./routes/people.js";
 
 const app = express();
@@ -23,6 +24,7 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/auth", authRouter);
 app.use("/api/people", requireAdmin, peopleRouter);
 app.use("/api/attendance", requireAdmin, attendanceRouter);
+app.use("/api/fingerprint", requireAdmin, fingerprintRouter);
 
 connectDatabase(process.env.MONGODB_URI)
   .then(() => {

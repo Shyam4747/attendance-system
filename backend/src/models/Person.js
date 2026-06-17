@@ -53,6 +53,30 @@ const personSchema = new mongoose.Schema(
         enum: ["not_configured", "pending_device", "registered"],
         default: "pending_device",
       },
+      credentialId: {
+        type: String,
+        default: "",
+      },
+      credentialPublicKey: {
+        type: String,
+        default: "",
+      },
+      counter: {
+        type: Number,
+        default: 0,
+      },
+      transports: {
+        type: [String],
+        default: [],
+      },
+      credentialDeviceType: {
+        type: String,
+        default: "",
+      },
+      credentialBackedUp: {
+        type: Boolean,
+        default: false,
+      },
       registeredAt: Date,
     },
     active: {
