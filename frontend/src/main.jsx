@@ -281,6 +281,10 @@ function App() {
   const [toasts, setToasts] = useState([]);
   const [personPendingDelete, setPersonPendingDelete] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [installPromptEvent, setInstallPromptEvent] = useState(null);
+  const [isStandaloneApp, setIsStandaloneApp] = useState(() =>
+    window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true,
+  );
 
   // Setup Theme on load / change
   useEffect(() => {
@@ -292,6 +296,34 @@ function App() {
     }
     window.localStorage.setItem("attendance_theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+
+    const handleBeforeInstallPrompt = (event) => {
+      event.preventDefault();
+      setInstallPromptEvent(event);
+    };
+    const handleAppInstalled = () => {
+      setInstallPromptEvent(null);
+      setIsStandaloneApp(true);
+      addToast("App Installed", "Attendance is ready from your home screen.", "success");
+    };
+    const standaloneQuery = window.matchMedia("(display-mode: standalone)");
+    const handleStandaloneChange = (event) => setIsStandaloneApp(event.matches);
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleAppInstalled);
+    standaloneQuery.addEventListener?.("change", handleStandaloneChange);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", handleAppInstalled);
+      standaloneQuery.removeEventListener?.("change", handleStandaloneChange);
+    };
+  }, []);
 
   // Toast adder
   const addToast = (title, message, type = "info") => {
@@ -940,6 +972,21 @@ function App() {
     }, 100);
   }
 
+  async function installApp() {
+    if (!installPromptEvent) {
+      addToast("Install App", "Open the browser menu and choose Add to Home screen.", "info");
+      return;
+    }
+
+    installPromptEvent.prompt();
+    const choice = await installPromptEvent.userChoice;
+    setInstallPromptEvent(null);
+
+    if (choice.outcome === "accepted") {
+      addToast("Installing App", "Attendance is being added to your device.", "success");
+    }
+  }
+
   if (!token) {
     return (
       <main className="login-shell">
@@ -1079,6 +1126,12 @@ function App() {
             <Icon name="logout" size={16} />
             Logout
           </button>
+          {!isStandaloneApp && (
+            <button type="button" className="secondary-button install-button" onClick={installApp}>
+              <Icon name="download" size={16} />
+              Install
+            </button>
+          )}
           <a className="cyan-button" href="#manual-attendance" onClick={handleMarkAttendanceClick}>
             <Icon name="camera" size={16} />
             Biometric Scanner
